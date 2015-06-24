@@ -403,16 +403,17 @@ var resizePizzas = function(size) {
   window.performance.mark("mark_start_resize");   // User Timing API function
 
   // Changes the value for the size of the pizza above the slider
+  //This is only called once.
   function changeSliderLabel(size) {
     switch(size) {
       case "1":
-        document.querySelector("#pizzaSize").innerHTML = "Small";
+      pizzaSizeInnerHTML = "Small";
         return;
       case "2":
-        document.querySelector("#pizzaSize").innerHTML = "Medium";
+      pizzaSizeInnerHTML = "Medium";
         return;
       case "3":
-        document.querySelector("#pizzaSize").innerHTML = "Large";
+      pizzaSizeInnerHTML = "Large";
         return;
       default:
         console.log("bug in changeSliderLabel");
@@ -422,6 +423,7 @@ var resizePizzas = function(size) {
   changeSliderLabel(size);
 
   // Returns the size difference to change a pizza element from one size to another. Called by changePizzaSlices(size).
+  //determineDx is called multiple Rather than requesting the window width each time this function is called, lets pass it in.
   function determineDx (elem, size) {
     var oldwidth = elem.offsetWidth;
     var windowwidth = document.querySelector("#randomPizzas").offsetWidth;
@@ -450,10 +452,14 @@ var resizePizzas = function(size) {
 
   // Iterates through pizza elements on the page and changes their widths
   function changePizzaSizes(size) {
-    for (var i = 0; i < document.querySelectorAll(".randomPizzaContainer").length; i++) {
-      var dx = determineDx(document.querySelectorAll(".randomPizzaContainer")[i], size);
-      var newwidth = (document.querySelectorAll(".randomPizzaContainer")[i].offsetWidth + dx) + 'px';
-      document.querySelectorAll(".randomPizzaContainer")[i].style.width = newwidth;
+    if(randPizzaContainer.length === 0)
+      return;
+
+    //All of the pizzas are the same size so I only need to calculate dx and the new width once
+    var dx = determineDx(randPizzaContainer[0], size)
+    var newwidth = (randPizzaContainer[0].offsetWidth + dx) + 'px';
+    for (var i = 0; i < randPizzaContainer.length; i++) {
+      randPizzaContainer[i].style.width = newwidth;
     }
   }
 
@@ -491,7 +497,7 @@ function logAverageFrame(times) {   // times is the array of User Timing measure
   for (var i = numberOfEntries - 1; i > numberOfEntries - 11; i--) {
     sum = sum + times[i].duration;
   }
-  times.splice(0, times.length);  //Lets free up some memory here.
+  times.splice(0, numberOfEntries);
   console.log("Average time to generate last 10 frames: " + sum / 10 + "ms");
 }
 
@@ -499,24 +505,32 @@ function logAverageFrame(times) {   // times is the array of User Timing measure
 // https://www.igvita.com/slides/2012/devtools-tips-and-tricks/jank-demo.html
 
 // Moves the sliding background pizzas based on scroll position
-var moverItems = null;
+
 function updatePositions() {
   frame++;
   window.performance.mark("mark_start_frame");
 
-//This only needs to be calculated once each time this for loop runs.
-  var scrollTop = (document.body.scrollTop / 1250);
+  //I need the scrolltop to help determine the location of each individual element.
+  //I only need to retreive it once and not each time I run through the loop.
+  var scrolltop = (document.body.scrollTop / 1250);
+
+  var phases = [];
+  //There are only 5 phases. Rather than calculating the phases every time, lets calculate them once and
+  //store them in an array. Then use the array.
+  for(var p = 0; p < 5; p++)
+    phases[p] = Math.sin(scrolltop + p);
 
   for (var i = 0; i < moveritems.length; i++) {
-    var phase = Math.sin(scrollTop + (i % 5));
-    moveritems[i].style.left = moveritems[i].basicLeft + 100 * phase + 'px';
 
+    moveritems[i].style.left = moveritems[i].basicLeft + 100 * phases[i % 5] + 'px';
   }
+
   // User Timing API to the rescue again. Seriously, it's worth learning.
   // Super easy to create custom metrics.
   window.performance.mark("mark_end_frame");
   window.performance.measure("measure_frame_duration", "mark_start_frame", "mark_end_frame");
-  if (frame % 10 === 0) {
+  if (frame >= 10) {
+    frame = 0;
     var timesToUpdatePosition = window.performance.getEntriesByName("measure_frame_duration");
     logAverageFrame(timesToUpdatePosition);
   }
@@ -529,10 +543,7 @@ window.addEventListener('scroll', updatePositions);
 document.addEventListener('DOMContentLoaded', function() {
   var cols = 8;
   var s = 256;
-
-  //There's no need for 200 pizzas. If each "pizza" is 100px high,
-  //then we can get away with the screen height / 100 * the number of columns
-  var rows = screen.height / 100.0;
+  var rows = screen.height / s + 1; //Plus 1, just in case.
   var numPizzas = rows * cols;
 
   for (var i = 0; i < numPizzas; i++) {
@@ -545,6 +556,12 @@ document.addEventListener('DOMContentLoaded', function() {
     elem.style.top = (Math.floor(i / cols) * s) + 'px';
     document.querySelector("#movingPizzas1").appendChild(elem);
   }
-  moveritems = document.querySelectorAll('.mover');
+
+  //Each of the variables below was being used to retreive an element from the DOM for some purpose inside of a function.
+  //Every time the function was called, the js had to go find the element in the DOM, which takes time. The elements
+  //aren't changing, so we can retreive them once rather than each time.
+  moveritems = document.getElementsByClassName('mover');
+  randPizzaContainer = document.getElementsByClassName("randomPizzaContainer");
+  pizzaSizeInnerHTML = document.querySelector("#pizzaSize").innerHTML;
   updatePositions();
 });
